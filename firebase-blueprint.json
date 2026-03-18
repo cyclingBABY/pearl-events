@@ -108,6 +108,20 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "When the item was added." }
       },
       "required": ["url", "type", "createdAt"]
+    },
+    "MediaItem": {
+      "title": "MediaItem",
+      "description": "A record of any file uploaded to the system.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The URL of the media file." },
+        "name": { "type": "string", "description": "The original name of the file." },
+        "type": { "type": "string", "description": "The MIME type or category (image/video)." },
+        "size": { "type": "number", "description": "The file size in bytes." },
+        "folder": { "type": "string", "description": "The folder/category in storage (e.g., 'gallery', 'blog')." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the file was uploaded." }
+      },
+      "required": ["url", "name", "type", "createdAt"]
     }
   },
   "firestore": {
@@ -118,6 +132,7 @@
     "inquiries": { "schema": "Inquiry", "description": "Collection of client leads." },
     "users": { "schema": "User", "description": "Collection of system users and roles." },
     "messages": { "schema": "Message", "description": "Collection of direct messages." },
-    "gallery": { "schema": "GalleryItem", "description": "Collection of individual gallery media." }
+    "gallery": { "schema": "GalleryItem", "description": "Collection of individual gallery media." },
+    "media": { "schema": "MediaItem", "description": "A centralized record of all uploaded files." }
   }
 }

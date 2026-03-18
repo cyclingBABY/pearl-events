@@ -55,7 +55,8 @@ import {
   Box,
   Ruler,
   Truck,
-  ClipboardList
+  ClipboardList,
+  Search
 } from 'lucide-react';
 import { 
   onSnapshot, 
@@ -145,6 +146,16 @@ interface GalleryItem {
   type: 'image' | 'video';
   category?: string;
   title?: string;
+  createdAt: Timestamp;
+}
+
+interface MediaItem {
+  id: string;
+  url: string;
+  name: string;
+  type: string;
+  size: number;
+  folder: string;
   createdAt: Timestamp;
 }
 
@@ -1198,12 +1209,13 @@ function MessagingSystem({ receiverId, senderName }: { receiverId: string, sende
 // --- Admin Dashboard ---
 
 function AdminDashboard({ onBack }: { onBack: () => void }) {
-  const [activeTab, setActiveTab] = useState<'inquiries' | 'events' | 'services' | 'blog' | 'messages' | 'gallery'>('inquiries');
+  const [activeTab, setActiveTab] = useState<'inquiries' | 'events' | 'services' | 'blog' | 'messages' | 'gallery' | 'media'>('inquiries');
   const [inquiries, setInquiries] = useState<InquiryEntry[]>([]);
   const [events, setEvents] = useState<EventEntry[]>([]);
   const [services, setServices] = useState<ServiceEntry[]>([]);
   const [blogPosts, setBlogPosts] = useState<BlogPostEntry[]>([]);
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
@@ -1211,7 +1223,9 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadStatus, setUploadStatus] = useState<string>('');
-  const [uploadType, setUploadType] = useState<'link' | 'file'>('link');
+  const [uploadType, setUploadType] = useState<'link' | 'file' | 'library'>('link');
+  const [mediaFilter, setMediaFilter] = useState<string>('all');
+  const [mediaSearch, setMediaSearch] = useState<string>('');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
@@ -1243,7 +1257,10 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
     const unsubGallery = onSnapshot(query(collection(db, 'gallery'), orderBy('createdAt', 'desc'), limit(50)), (snap) => {
       setGallery(snap.docs.map(d => ({ id: d.id, ...d.data() } as GalleryItem)));
     });
-    return () => { unsubInq(); unsubEvents(); unsubServices(); unsubBlog(); unsubGallery(); };
+    const unsubMedia = onSnapshot(query(collection(db, 'media'), orderBy('createdAt', 'desc'), limit(100)), (snap) => {
+      setMedia(snap.docs.map(d => ({ id: d.id, ...d.data() } as MediaItem)));
+    });
+    return () => { unsubInq(); unsubEvents(); unsubServices(); unsubBlog(); unsubGallery(); unsubMedia(); };
   }, []);
 
   const seedServices = async () => {
@@ -1474,8 +1491,9 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const uploadFile = async (file: File, field: 'image' | 'videoUrl') => {
-    const storageRef = ref(storage, `${activeTab}/${Date.now()}_${file.name}`);
+  const uploadFile = async (file: File, field: 'image' | 'videoUrl', customFolder?: string) => {
+    const folder = customFolder || activeTab;
+    const storageRef = ref(storage, `${folder}/${Date.now()}_${file.name}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
 
     return new Promise<string>((resolve, reject) => {
@@ -1491,6 +1509,17 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
         async () => {
           try {
             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // Centralized media tracking
+            await addDoc(collection(db, 'media'), {
+              url: downloadURL,
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              folder: folder,
+              createdAt: serverTimestamp()
+            });
+
             resolve(downloadURL);
           } catch (err) {
             reject(err);
@@ -1550,7 +1579,7 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
 
           if (filesToUpload.length > 0) {
             setUploadStatus(`Uploading ${filesToUpload.length} file(s)...`);
-            const uploadPromises = filesToUpload.map(({ file, field }) => uploadFile(file, field));
+            const uploadPromises = filesToUpload.map(({ file, field }) => uploadFile(file, field, formData.folder));
             const urls = await Promise.all(uploadPromises);
             
             filesToUpload.forEach(({ field }, index) => {
@@ -1559,31 +1588,46 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
           }
         }
 
-        if (activeTab === 'events') {
-          data.images = [data.image];
-          data.tags = data.tags?.split(',').map((t: string) => t.trim()) || [];
-        }
-        if (activeTab === 'blog') {
-          data.date = data.date || new Date().toISOString().split('T')[0];
-          data.author = data.author || 'Pearl Admin';
-        }
-        if (activeTab === 'gallery') {
-          data.url = data.image || data.url;
-          data.type = videoFile || data.videoUrl ? 'video' : 'image';
-          delete data.image;
-        }
-
-        if (editingItem) {
-          await updateDoc(doc(db, collectionName, editingItem.id), {
-            ...data,
-            updatedAt: Timestamp.now()
-          });
+        if (activeTab === 'media') {
+          // Media is already handled by uploadFile's centralized tracking
+          // If it was just a link, we add it manually
+          if (uploadType === 'link') {
+            await addDoc(collection(db, 'media'), {
+              url: data.image || data.url,
+              name: (data.image || data.url).split('/').pop() || 'Linked Media',
+              type: 'image/external', // Assume image for link if not specified
+              size: 0,
+              folder: data.folder || 'links',
+              createdAt: serverTimestamp()
+            });
+          }
         } else {
-          await addDoc(collection(db, collectionName), {
-            ...data,
-            createdAt: Timestamp.now(),
-            updatedAt: Timestamp.now()
-          });
+          if (activeTab === 'events') {
+            data.images = [data.image];
+            data.tags = data.tags?.split(',').map((t: string) => t.trim()) || [];
+          }
+          if (activeTab === 'blog') {
+            data.date = data.date || new Date().toISOString().split('T')[0];
+            data.author = data.author || 'Pearl Admin';
+          }
+          if (activeTab === 'gallery') {
+            data.url = data.image || data.url;
+            data.type = videoFile || data.videoUrl ? 'video' : 'image';
+            delete data.image;
+          }
+
+          if (editingItem) {
+            await updateDoc(doc(db, collectionName, editingItem.id), {
+              ...data,
+              updatedAt: Timestamp.now()
+            });
+          } else {
+            await addDoc(collection(db, collectionName), {
+              ...data,
+              createdAt: Timestamp.now(),
+              updatedAt: Timestamp.now()
+            });
+          }
         }
       }
 
@@ -1628,6 +1672,7 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
               { id: 'services', icon: Layout, label: 'Services' },
               { id: 'blog', icon: FileText, label: 'Blog' },
               { id: 'gallery', icon: Camera, label: 'Gallery' },
+              { id: 'media', icon: Upload, label: 'Media' },
               { id: 'messages', icon: MessageCircle, label: 'Messages' }
             ].map(tab => (
             <button
@@ -1700,6 +1745,7 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                 activeTab === 'blog' ? 'Post' : 
                 activeTab === 'gallery' ? 'Item' :
                 activeTab === 'inquiries' ? 'Inquiry' :
+                activeTab === 'media' ? 'Media' :
                 activeTab.slice(0, -1)
               }
             </button>
@@ -1805,6 +1851,19 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                   </div>
                 )}
 
+                {activeTab === 'media' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-widest font-bold opacity-40">Folder Name</label>
+                    <input 
+                      type="text" 
+                      value={formData.folder || ''}
+                      onChange={e => setFormData({...formData, folder: e.target.value})}
+                      className="w-full bg-pearl-cream/50 px-6 py-4 rounded-2xl outline-none focus:ring-1 ring-pearl-gold transition-all"
+                      placeholder="e.g. weddings, portraits, etc."
+                    />
+                  </div>
+                )}
+
                 {(activeTab !== 'gallery' || editingItem) && (
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-widest font-bold opacity-40">Description</label>
@@ -1835,6 +1894,13 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                       >
                         <Upload className="w-4 h-4" /> Upload File
                       </button>
+                      <button 
+                        type="button"
+                        onClick={() => setUploadType('library')}
+                        className={`flex-1 py-3 rounded-xl text-xs uppercase tracking-widest font-bold flex items-center justify-center gap-2 transition-all ${uploadType === 'library' ? 'bg-pearl-dark text-white' : 'bg-pearl-cream text-pearl-dark/40'}`}
+                      >
+                        <Camera className="w-4 h-4" /> Media Library
+                      </button>
                     </div>
 
                     <div className="space-y-2">
@@ -1850,7 +1916,7 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                           className="w-full bg-pearl-cream/50 px-6 py-4 rounded-2xl outline-none focus:ring-1 ring-pearl-gold transition-all"
                           placeholder="https://images.unsplash.com/..."
                         />
-                      ) : (
+                      ) : uploadType === 'file' ? (
                         <div className="relative">
                           <input 
                             type="file" 
@@ -1858,6 +1924,26 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                             onChange={e => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'image')}
                             className="w-full bg-pearl-cream/50 px-6 py-4 rounded-2xl outline-none focus:ring-1 ring-pearl-gold transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-pearl-dark file:text-white hover:file:bg-pearl-gold cursor-pointer"
                           />
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 bg-pearl-cream/30 rounded-2xl border border-pearl-dark/5">
+                          {media.filter(m => m.type.startsWith('image/')).map(m => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onClick={() => {
+                                setFormData({...formData, [activeTab === 'gallery' ? 'url' : 'image']: m.url});
+                                setImagePreview(null);
+                                setImageFile(null);
+                              }}
+                              className={`aspect-square rounded-lg overflow-hidden border-2 transition-all ${ (formData.image === m.url || formData.url === m.url) ? 'border-pearl-gold ring-2 ring-pearl-gold/20' : 'border-transparent hover:border-pearl-gold/40'}`}
+                            >
+                              <img src={m.url} alt={m.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            </button>
+                          ))}
+                          {media.filter(m => m.type.startsWith('image/')).length === 0 && (
+                            <p className="col-span-4 text-center py-8 text-[10px] uppercase tracking-widest font-bold opacity-30">No images in library</p>
+                          )}
                         </div>
                       )}
                         {(formData.image || formData.url || imagePreview) && (
@@ -1881,7 +1967,7 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                             className="w-full bg-pearl-cream/50 px-6 py-4 rounded-2xl outline-none focus:ring-1 ring-pearl-gold transition-all"
                             placeholder="https://youtube.com/... or direct video link"
                           />
-                        ) : (
+                        ) : uploadType === 'file' ? (
                           <div className="relative">
                             <input 
                               type="file" 
@@ -1889,6 +1975,26 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
                               onChange={e => e.target.files?.[0] && handleFileSelect(e.target.files[0], 'videoUrl')}
                               className="w-full bg-pearl-cream/50 px-6 py-4 rounded-2xl outline-none focus:ring-1 ring-pearl-gold transition-all file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-bold file:bg-pearl-dark file:text-white hover:file:bg-pearl-gold cursor-pointer"
                             />
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto p-2 bg-pearl-cream/30 rounded-2xl border border-pearl-dark/5">
+                            {media.filter(m => !m.type.startsWith('image/')).map(m => (
+                              <button
+                                key={m.id}
+                                type="button"
+                                onClick={() => {
+                                  setFormData({...formData, videoUrl: m.url});
+                                  setVideoPreview(null);
+                                  setVideoFile(null);
+                                }}
+                                className={`aspect-square rounded-lg overflow-hidden border-2 transition-all flex items-center justify-center bg-pearl-dark/5 ${ formData.videoUrl === m.url ? 'border-pearl-gold ring-2 ring-pearl-gold/20' : 'border-transparent hover:border-pearl-gold/40'}`}
+                              >
+                                <Video className="w-6 h-6 text-pearl-gold" />
+                              </button>
+                            ))}
+                            {media.filter(m => !m.type.startsWith('image/')).length === 0 && (
+                              <p className="col-span-4 text-center py-8 text-[10px] uppercase tracking-widest font-bold opacity-30">No videos in library</p>
+                            )}
                           </div>
                         )}
                           {(formData.videoUrl || videoPreview) && (
@@ -2007,6 +2113,69 @@ function AdminDashboard({ onBack }: { onBack: () => void }) {
             ))}
           </div>
         )}
+
+        {activeTab === 'media' && (
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white p-6 rounded-3xl shadow-sm border border-pearl-dark/5">
+              <div className="flex items-center gap-4 w-full md:w-auto">
+                <Search className="w-5 h-5 opacity-30" />
+                <input 
+                  type="text" 
+                  placeholder="Search media..." 
+                  value={mediaSearch}
+                  onChange={e => setMediaSearch(e.target.value)}
+                  className="bg-transparent outline-none text-sm w-full"
+                />
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+                {['all', ...Array.from(new Set(media.map(m => m.folder)))].map(folder => (
+                  <button
+                    key={folder}
+                    onClick={() => setMediaFilter(folder)}
+                    className={`px-4 py-2 rounded-full text-[10px] uppercase tracking-widest font-bold transition-all whitespace-nowrap ${mediaFilter === folder ? 'bg-pearl-gold text-white' : 'bg-pearl-cream/50 text-pearl-dark/40 hover:bg-pearl-cream'}`}
+                  >
+                    {folder}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
+              {media
+                .filter(m => (mediaFilter === 'all' || m.folder === mediaFilter) && m.name.toLowerCase().includes(mediaSearch.toLowerCase()))
+                .map(item => (
+              <div key={item.id} className="group relative aspect-square bg-pearl-cream/30 rounded-2xl overflow-hidden border border-pearl-dark/5">
+                {item.type.startsWith('image/') ? (
+                  <img src={item.url} alt={item.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-pearl-dark/5">
+                    <Video className="w-8 h-8 text-pearl-gold" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-pearl-dark/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-4 text-center">
+                  <p className="text-[10px] text-white font-bold uppercase tracking-widest truncate w-full mb-1">{item.name}</p>
+                  <p className="text-[8px] text-white/60 uppercase tracking-widest mb-4">{(item.size / 1024).toFixed(1)} KB · {item.folder}</p>
+                  <div className="flex gap-2">
+                    <a href={item.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
+                      <LinkIcon className="w-3 h-3" />
+                    </a>
+                    <button 
+                      onClick={async () => {
+                        if (confirm('Delete this file? This only removes the record, not the actual file from storage.')) {
+                          await deleteDoc(doc(db, 'media', item.id));
+                        }
+                      }}
+                      className="p-2 bg-red-500/20 hover:bg-red-500/40 rounded-full text-red-200 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
         {activeTab === 'gallery' && (
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
