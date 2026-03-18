@@ -1,0 +1,109 @@
+{
+  "entities": {
+    "Event": {
+      "title": "Event",
+      "description": "A luxury event showcase entry.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The name of the event." },
+        "description": { "type": "string", "description": "A brief description of the concept." },
+        "type": { "type": "string", "enum": ["Wedding", "Kwanjula", "Corporate", "Other"], "description": "The category of the event." },
+        "images": { "type": "array", "items": { "type": "string" }, "description": "List of high-resolution image URLs." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Tags like 'Gold', 'Luxury', 'Floral'." },
+        "date": { "type": "string", "format": "date", "description": "The date of the event." }
+      },
+      "required": ["title", "type", "images"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A service offered by Pearl Events.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The name of the service." },
+        "description": { "type": "string", "description": "Detailed description of the service." },
+        "icon": { "type": "string", "description": "Lucide icon name." },
+        "image": { "type": "string", "description": "A representative image URL." },
+        "priceRange": { "type": "string", "description": "Optional price range information." }
+      },
+      "required": ["title", "description"]
+    },
+    "Testimonial": {
+      "title": "Testimonial",
+      "description": "A client review.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The name of the client." },
+        "role": { "type": "string", "description": "The client's role (e.g., Bride)." },
+        "content": { "type": "string", "description": "The review text." },
+        "rating": { "type": "number", "description": "Rating from 1 to 5." },
+        "image": { "type": "string", "description": "Optional client photo URL." }
+      },
+      "required": ["name", "content", "rating"]
+    },
+    "BlogPost": {
+      "title": "BlogPost",
+      "description": "An article for SEO and insights.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the post." },
+        "content": { "type": "string", "description": "The body of the post in Markdown." },
+        "author": { "type": "string", "description": "The author's name." },
+        "date": { "type": "string", "format": "date", "description": "Publication date." },
+        "image": { "type": "string", "description": "Featured image URL." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "SEO tags." }
+      },
+      "required": ["title", "content", "author", "date"]
+    },
+    "Inquiry": {
+      "title": "Inquiry",
+      "description": "A lead from the booking form.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The prospect's name." },
+        "email": { "type": "string", "format": "email", "description": "The prospect's email." },
+        "phone": { "type": "string", "description": "The prospect's phone number." },
+        "eventDate": { "type": "string", "format": "date", "description": "Planned event date." },
+        "location": { "type": "string", "description": "Event location." },
+        "guestCount": { "type": "number", "description": "Estimated guest count." },
+        "interests": { "type": "array", "items": { "type": "string" }, "description": "Specific decor interests." },
+        "status": { "type": "string", "enum": ["pending", "contacted", "booked"], "description": "Status of the lead." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the inquiry was made." }
+      },
+      "required": ["name", "email", "eventDate", "status", "createdAt"]
+    },
+    "User": {
+      "title": "User",
+      "description": "A system user.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID." },
+        "email": { "type": "string", "description": "User's email." },
+        "role": { "type": "string", "enum": ["admin", "editor", "client"], "description": "User's role." },
+        "name": { "type": "string", "description": "User's full name." }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A direct message between a client and the admin.",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string", "description": "The UID of the sender." },
+        "receiverId": { "type": "string", "description": "The UID of the receiver (usually the admin)." },
+        "content": { "type": "string", "description": "The message content." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the message was sent." },
+        "read": { "type": "boolean", "description": "Whether the message has been read." }
+      },
+      "required": ["senderId", "receiverId", "content", "timestamp"]
+    }
+  },
+  "firestore": {
+    "events": { "schema": "Event", "description": "Collection of luxury events." },
+    "services": { "schema": "Service", "description": "Collection of offered services." },
+    "testimonials": { "schema": "Testimonial", "description": "Collection of client reviews." },
+    "blogPosts": { "schema": "BlogPost", "description": "Collection of blog articles." },
+    "inquiries": { "schema": "Inquiry", "description": "Collection of client leads." },
+    "users": { "schema": "User", "description": "Collection of system users and roles." },
+    "messages": { "schema": "Message", "description": "Collection of direct messages." }
+  }
+}
