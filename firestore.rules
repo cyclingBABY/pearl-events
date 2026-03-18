@@ -48,6 +48,14 @@
 //   - status: string (required, enum: ['pending', 'contacted', 'booked'])
 //   - uid: string (optional) - Linked user UID
 //
+// Collection: gallery
+// Fields:
+//   - url: string (required)
+//   - type: string (required, enum: ['image', 'video'])
+//   - category: string (required)
+//   - title: string (optional)
+//   - createdAt: string (required, ISO date)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -136,6 +144,11 @@ service cloud.firestore {
     }
 
     match /blogPosts/{postId} {
+      allow read: if true;
+      allow write: if isEditor();
+    }
+
+    match /gallery/{document=**} {
       allow read: if true;
       allow write: if isEditor();
     }

@@ -95,6 +95,19 @@
         "read": { "type": "boolean", "description": "Whether the message has been read." }
       },
       "required": ["senderId", "receiverId", "content", "timestamp"]
+    },
+    "GalleryItem": {
+      "title": "GalleryItem",
+      "description": "A single photo or video for the large gallery.",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "description": "The URL of the media file." },
+        "type": { "type": "string", "enum": ["image", "video"], "description": "The type of media." },
+        "category": { "type": "string", "description": "Category like 'Decor', 'Lighting', 'Floral'." },
+        "title": { "type": "string", "description": "Optional title." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the item was added." }
+      },
+      "required": ["url", "type", "createdAt"]
     }
   },
   "firestore": {
@@ -104,6 +117,7 @@
     "blogPosts": { "schema": "BlogPost", "description": "Collection of blog articles." },
     "inquiries": { "schema": "Inquiry", "description": "Collection of client leads." },
     "users": { "schema": "User", "description": "Collection of system users and roles." },
-    "messages": { "schema": "Message", "description": "Collection of direct messages." }
+    "messages": { "schema": "Message", "description": "Collection of direct messages." },
+    "gallery": { "schema": "GalleryItem", "description": "Collection of individual gallery media." }
   }
 }
